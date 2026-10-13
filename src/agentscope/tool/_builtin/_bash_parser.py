@@ -210,6 +210,45 @@ class BashCommandParser:
         if self._is_mutating_find_command(cmd):
             return False
 
+        # ``less -o/-O`` writes a log for piped input, while
+        # ``file -C/--compile`` writes a compiled magic database.
+        if cmd.startswith(("less ", "file ")):
+            try:
+                tokens = shlex.split(cmd)
+            except ValueError:
+                return False
+
+            for token in tokens[1:]:
+                if token == "--":
+                    break
+                if not token.startswith("-") or token == "-":
+                    continue
+
+                if tokens[0] == "less":
+                    if token.startswith("--"):
+                        # less permits unambiguous long-option abbreviations.
+                        if token.lower().startswith("--log"):
+                            return False
+                        continue
+                    for flag in token[1:]:
+                        if flag in {"o", "O"}:
+                            return False
+                        # These options consume the rest of a short bundle.
+                        if flag in 'bDhjkpPtTxyz#"':
+                            break
+
+                if tokens[0] == "file":
+                    if token.startswith("--"):
+                        # file parses long options with getopt_long.
+                        if token.startswith("--comp"):
+                            return False
+                        continue
+                    for flag in token[1:]:
+                        if flag == "C":
+                            return False
+                        if flag in "eFfmP":
+                            break
+
         # ``git grep -O<cmd>`` runs a command, ``--output=<file>`` writes one
         if cmd.startswith("git "):
             try:

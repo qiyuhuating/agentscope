@@ -256,6 +256,34 @@ class BashParserReadOnlyTest(IsolatedAsyncioTestCase):
                     f"Expected '{cmd}' to be read-only",
                 )
 
+    async def test_side_effecting_read_only_options(self) -> None:
+        """Options that write files must not pass the read-only fast path."""
+        expected = {
+            "file README.md": True,
+            "file -b README.md": True,
+            "file -F C README.md": True,
+            "file -- -C": True,
+            "file -C -m magic": False,
+            "file -bC -m magic": False,
+            "file --compile -m magic": False,
+            "file --comp -m magic": False,
+            "less README.md": True,
+            "less -N README.md": True,
+            "less -Pfoo README.md": True,
+            "less -- --log-file": True,
+            "less -o/tmp/less.log": False,
+            "less -NO/tmp/less.log": False,
+            "less --log-file=/tmp/less.log": False,
+            "less --Log-f=/tmp/less.log": False,
+            "printf hi | less -O/tmp/less.log": False,
+        }
+        for cmd, read_only in expected.items():
+            with self.subTest(cmd=cmd):
+                self.assertEqual(
+                    self.parser.is_read_only_command(cmd),
+                    read_only,
+                )
+
     async def test_mutating_find_commands_are_not_read_only(self) -> None:
         """Test find predicates that can modify files are not read-only."""
         mutating_find_commands = [
